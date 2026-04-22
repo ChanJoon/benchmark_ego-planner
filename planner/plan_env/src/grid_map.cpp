@@ -22,6 +22,15 @@ void GridMap::initMap(ros::NodeHandle &nh)
   node_.param("grid_map/fy", mp_.fy_, -1.0);
   node_.param("grid_map/cx", mp_.cx_, -1.0);
   node_.param("grid_map/cy", mp_.cy_, -1.0);
+  double cam2body_pos_x, cam2body_pos_y, cam2body_pos_z;
+  double cam2body_qw, cam2body_qx, cam2body_qy, cam2body_qz;
+  node_.param("grid_map/cam2body_pos_x", cam2body_pos_x, 0.0);
+  node_.param("grid_map/cam2body_pos_y", cam2body_pos_y, 0.0);
+  node_.param("grid_map/cam2body_pos_z", cam2body_pos_z, 0.0);
+  node_.param("grid_map/cam2body_qw", cam2body_qw, 0.5);
+  node_.param("grid_map/cam2body_qx", cam2body_qx, -0.5);
+  node_.param("grid_map/cam2body_qy", cam2body_qy, 0.5);
+  node_.param("grid_map/cam2body_qz", cam2body_qz, -0.5);
 
   node_.param("grid_map/use_depth_filter", mp_.use_depth_filter_, true);
   node_.param("grid_map/depth_filter_tolerance", mp_.depth_filter_tolerance_, -1.0);
@@ -88,10 +97,11 @@ void GridMap::initMap(ros::NodeHandle &nh)
 
   md_.proj_points_.resize(640 * 480 / mp_.skip_pixel_ / mp_.skip_pixel_);
   md_.proj_points_cnt = 0;
-  md_.cam2body_ << 0.0, 0.0, 1.0, 0.0,
-      -1.0, 0.0, 0.0, 0.0,
-      0.0, -1.0, 0.0, 0,
-      0.0, 0.0, 0.0, 1.0;
+  Eigen::Quaterniond cam2body_q(cam2body_qw, cam2body_qx, cam2body_qy, cam2body_qz);
+  cam2body_q.normalize();
+  md_.cam2body_.setIdentity();
+  md_.cam2body_.block<3, 3>(0, 0) = cam2body_q.toRotationMatrix();
+  md_.cam2body_.block<3, 1>(0, 3) = Eigen::Vector3d(cam2body_pos_x, cam2body_pos_y, cam2body_pos_z);
 
   /* init callback */
 

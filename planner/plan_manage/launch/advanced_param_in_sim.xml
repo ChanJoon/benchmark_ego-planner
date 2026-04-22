@@ -12,6 +12,16 @@
   <arg name="cy"/>
   <arg name="fx"/>
   <arg name="fy"/>
+  <arg name="cam2body_pos_x" default="0.0"/>
+  <arg name="cam2body_pos_y" default="0.0"/>
+  <arg name="cam2body_pos_z" default="0.0"/>
+  <arg name="cam2body_qw" default="0.5"/>
+  <arg name="cam2body_qx" default="-0.5"/>
+  <arg name="cam2body_qy" default="0.5"/>
+  <arg name="cam2body_qz" default="-0.5"/>
+  <arg name="depth_filter_maxdist" default="4.0"/>
+  <arg name="depth_filter_mindist" default="0.05"/>
+  <arg name="max_ray_length" default="4.0"/>
 
   <arg name="max_vel"/>
   <arg name="max_acc"/>
@@ -84,12 +94,19 @@
     <param name="grid_map/cy" value="$(arg cy)"/>
     <param name="grid_map/fx" value="$(arg fx)"/>
     <param name="grid_map/fy" value="$(arg fy)"/>
+    <param name="grid_map/cam2body_pos_x" value="$(arg cam2body_pos_x)"/>
+    <param name="grid_map/cam2body_pos_y" value="$(arg cam2body_pos_y)"/>
+    <param name="grid_map/cam2body_pos_z" value="$(arg cam2body_pos_z)"/>
+    <param name="grid_map/cam2body_qw" value="$(arg cam2body_qw)"/>
+    <param name="grid_map/cam2body_qx" value="$(arg cam2body_qx)"/>
+    <param name="grid_map/cam2body_qy" value="$(arg cam2body_qy)"/>
+    <param name="grid_map/cam2body_qz" value="$(arg cam2body_qz)"/>
     <!-- depth filter -->
     <param name="grid_map/use_depth_filter" value="true"/>
     <param name="grid_map/depth_filter_tolerance" value="0.15"/>
-    <param name="grid_map/depth_filter_maxdist"   value="4.00"/>
-    <param name="grid_map/depth_filter_mindist"   value="0.05"/>
-    <param name="grid_map/depth_filter_margin"    value="1"/>
+    <param name="grid_map/depth_filter_maxdist" value="$(arg depth_filter_maxdist)"/>
+    <param name="grid_map/depth_filter_mindist" value="$(arg depth_filter_mindist)"/>
+    <param name="grid_map/depth_filter_margin" value="1"/>
     <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
     <param name="grid_map/skip_pixel" value="1"/>
     <!-- local fusion -->
@@ -99,7 +116,7 @@
     <param name="grid_map/p_max"  value="0.90"/>
     <param name="grid_map/p_occ"  value="0.80"/>
     <param name="grid_map/min_ray_length" value="0.1"/>
-    <param name="grid_map/max_ray_length" value="4.0"/>
+    <param name="grid_map/max_ray_length" value="$(arg max_ray_length)"/>
 
     <param name="grid_map/virtual_ceil_height"   value="5.5"/>
     <param name="grid_map/visualization_truncate_height"   value="5.0"/>
