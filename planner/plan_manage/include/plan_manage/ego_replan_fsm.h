@@ -71,6 +71,8 @@ namespace ego_planner
     int current_wp_;
 
     bool flag_escape_emergency_;
+    bool has_pending_goal_;
+    nav_msgs::Path pending_goal_;
 
     /* ROS utils */
     ros::NodeHandle node_;
@@ -90,6 +92,7 @@ namespace ego_planner
 
     void planGlobalTrajbyGivenWps();
     void getLocalTarget();
+    void handleWaypoint(const nav_msgs::Path &msg);
 
     /* ROS functions */
     void execFSMCallback(const ros::TimerEvent &e);

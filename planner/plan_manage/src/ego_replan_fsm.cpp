@@ -8,8 +8,29 @@ namespace ego_planner
   {
     current_wp_ = 0;
     exec_state_ = FSM_EXEC_STATE::INIT;
+    trigger_ = false;
     have_target_ = false;
     have_odom_ = false;
+    have_new_target_ = false;
+    flag_escape_emergency_ = false;
+    has_pending_goal_ = false;
+    continously_called_times_ = 0;
+
+    odom_pos_.setZero();
+    odom_vel_.setZero();
+    odom_acc_.setZero();
+    odom_orient_.setIdentity();
+
+    init_pt_.setZero();
+    start_pt_.setZero();
+    start_vel_.setZero();
+    start_acc_.setZero();
+    start_yaw_.setZero();
+    end_pt_.setZero();
+    end_vel_.setZero();
+    local_target_pt_.setZero();
+    local_target_vel_.setZero();
+    pending_goal_.poses.clear();
 
     /*  fsm param  */
     nh.param("fsm/flight_type", target_type_, -1);
@@ -106,23 +127,31 @@ namespace ego_planner
     }
   }
 
-  void EGOReplanFSM::waypointCallback(const nav_msgs::PathConstPtr &msg)
+  void EGOReplanFSM::handleWaypoint(const nav_msgs::Path &msg)
   {
-    if (msg->poses[0].pose.position.z < -0.1)
+    if (msg.poses.empty())
+      return;
+
+    if (msg.poses[0].pose.position.z < -0.1)
       return;
 
     cout << "Triggered!" << endl;
-    trigger_ = true;
     init_pt_ = odom_pos_;
 
     bool success = false;
-    end_pt_ << msg->poses[0].pose.position.x, msg->poses[0].pose.position.y, 1.0;
+    end_pt_ << msg.poses[0].pose.position.x, msg.poses[0].pose.position.y, msg.poses[0].pose.position.z;
+    ROS_WARN_STREAM("[EGO][manual_goal] accepted waypoint goal="
+                    << end_pt_.transpose()
+                    << " frame_id=" << msg.header.frame_id);
     success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), end_pt_, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
 
     visualization_->displayGoalPoint(end_pt_, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 0);
 
     if (success)
     {
+      trigger_ = true;
+      has_pending_goal_ = false;
+      pending_goal_.poses.clear();
 
       /*** display ***/
       constexpr double step_size_t = 0.1;
@@ -143,13 +172,28 @@ namespace ego_planner
       else if (exec_state_ == EXEC_TRAJ)
         changeFSMExecState(REPLAN_TRAJ, "TRIG");
 
-      // visualization_->displayGoalPoint(end_pt_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
       visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
     }
     else
     {
       ROS_ERROR("Unable to generate global trajectory!");
     }
+  }
+
+  void EGOReplanFSM::waypointCallback(const nav_msgs::PathConstPtr &msg)
+  {
+    if (msg->poses.empty())
+      return;
+
+    if (!have_odom_)
+    {
+      pending_goal_ = *msg;
+      has_pending_goal_ = true;
+      ROS_WARN_THROTTLE(1.0, "Buffer manual goal until odometry is ready.");
+      return;
+    }
+
+    handleWaypoint(*msg);
   }
 
   void EGOReplanFSM::odometryCallback(const nav_msgs::OdometryConstPtr &msg)
@@ -169,7 +213,14 @@ namespace ego_planner
     odom_orient_.y() = msg->pose.pose.orientation.y;
     odom_orient_.z() = msg->pose.pose.orientation.z;
 
+    bool had_odom = have_odom_;
     have_odom_ = true;
+
+    if (!had_odom && has_pending_goal_)
+    {
+      nav_msgs::Path pending_goal = pending_goal_;
+      handleWaypoint(pending_goal);
+    }
   }
 
   void EGOReplanFSM::changeFSMExecState(FSM_EXEC_STATE new_state, string pos_call)
@@ -459,7 +510,17 @@ namespace ego_planner
 
       bspline_pub_.publish(bspline);
 
-      visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+      visualization_->displayOptimalTraj(info->position_traj_, 0);
+    }
+    else
+    {
+      ROS_WARN_STREAM_THROTTLE(0.5, "[EGO][replan_failed] no fresh local bspline. "
+                                      << "start=" << start_pt_.transpose()
+                                      << " local_target=" << local_target_pt_.transpose()
+                                      << " end=" << end_pt_.transpose()
+                                      << " use_poly_init=" << flag_use_poly_init
+                                      << " random_poly=" << flag_randomPolyTraj);
+      visualization_->clearOptimalTraj(0);
     }
 
     return plan_success;
