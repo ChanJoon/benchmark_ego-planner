@@ -90,29 +90,85 @@ vector<GridNodePtr> AStar::retrievePath(GridNodePtr current)
 
 bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d start_pt, Vector3d end_pt, Vector3i &start_idx, Vector3i &end_idx)
 {
-    if (!Coord2Index(start_pt, start_idx) || !Coord2Index(end_pt, end_idx))
-        return false;
+    Vector3d original_start = start_pt;
+    Vector3d original_end = end_pt;
 
-    if (checkOccupancy(Index2Coord(start_idx)))
+    if (!Coord2Index(start_pt, start_idx) || !Coord2Index(end_pt, end_idx))
     {
-        //ROS_WARN("Start point is insdide an obstacle.");
+        ROS_ERROR_STREAM("A* seed outside local pool before occupancy adjustment. center=" << center_.transpose()
+                         << " step_size=" << step_size_
+                         << " start=" << original_start.transpose()
+                         << " end=" << original_end.transpose());
+        return false;
+    }
+
+    bool start_in_occ = checkOccupancy(Index2Coord(start_idx));
+    bool end_in_occ = checkOccupancy(Index2Coord(end_idx));
+
+    if (start_in_occ || end_in_occ)
+    {
+        ROS_WARN_STREAM("A* seed occupancy check failed. center=" << center_.transpose()
+                        << " start=" << original_start.transpose()
+                        << " start_idx=" << start_idx.transpose()
+                        << " start_occ=" << start_in_occ
+                        << " start_coord=" << Index2Coord(start_idx).transpose()
+                        << " end=" << original_end.transpose()
+                        << " end_idx=" << end_idx.transpose()
+                        << " end_occ=" << end_in_occ
+                        << " end_coord=" << Index2Coord(end_idx).transpose());
+
+        if (start_in_occ)
+        {
+            ROS_WARN_STREAM_THROTTLE(1.0, "A* occupied start context: "
+                                     << grid_map_->describeOccupancyDebugContext(
+                                            original_start,
+                                            start_idx,
+                                            Index2Coord(start_idx)));
+        }
+    }
+
+    if (start_in_occ)
+    {
+        int start_adjust_steps = 0;
         do
         {
             start_pt = (start_pt - end_pt).normalized() * step_size_ + start_pt;
+            ++start_adjust_steps;
             if (!Coord2Index(start_pt, start_idx))
+            {
+                ROS_ERROR_STREAM("Adjusted A* start left local pool after " << start_adjust_steps
+                                 << " steps. original_start=" << original_start.transpose()
+                                 << " original_end=" << original_end.transpose()
+                                 << " adjusted_start=" << start_pt.transpose());
                 return false;
+            }
         } while (checkOccupancy(Index2Coord(start_idx)));
+
+        ROS_WARN_STREAM("Adjusted A* start out of occupancy after " << start_adjust_steps
+                        << " steps. adjusted_start=" << start_pt.transpose()
+                        << " adjusted_start_idx=" << start_idx.transpose());
     }
 
-    if (checkOccupancy(Index2Coord(end_idx)))
+    if (end_in_occ)
     {
-        //ROS_WARN("End point is insdide an obstacle.");
+        int end_adjust_steps = 0;
         do
         {
             end_pt = (end_pt - start_pt).normalized() * step_size_ + end_pt;
+            ++end_adjust_steps;
             if (!Coord2Index(end_pt, end_idx))
+            {
+                ROS_ERROR_STREAM("Adjusted A* end left local pool after " << end_adjust_steps
+                                 << " steps. original_start=" << original_start.transpose()
+                                 << " original_end=" << original_end.transpose()
+                                 << " adjusted_end=" << end_pt.transpose());
                 return false;
+            }
         } while (checkOccupancy(Index2Coord(end_idx)));
+
+        ROS_WARN_STREAM("Adjusted A* end out of occupancy after " << end_adjust_steps
+                        << " steps. adjusted_end=" << end_pt.transpose()
+                        << " adjusted_end_idx=" << end_idx.transpose());
     }
 
     return true;

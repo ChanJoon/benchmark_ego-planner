@@ -178,6 +178,11 @@ public:
   inline double getResolution();
   Eigen::Vector3d getOrigin();
   int getVoxelNum();
+  std::string describeOccupancyDebugContext(const Eigen::Vector3d& pos,
+                                            const Eigen::Vector3i& local_idx_hint,
+                                            const Eigen::Vector3d& local_coord_hint,
+                                            int neighbor_radius = 1,
+                                            int max_neighbors = 6);
 
   typedef std::shared_ptr<GridMap> Ptr;
 

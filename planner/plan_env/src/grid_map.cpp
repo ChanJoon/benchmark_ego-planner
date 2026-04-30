@@ -1,5 +1,7 @@
 #include "plan_env/grid_map.h"
 
+#include <sstream>
+
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
 
@@ -61,6 +63,8 @@ void GridMap::initMap(ros::NodeHandle &nh)
   mp_.resolution_inv_ = 1 / mp_.resolution_;
   mp_.map_origin_ = Eigen::Vector3d(-x_size / 2.0, -y_size / 2.0, mp_.ground_height_);
   mp_.map_size_ = Eigen::Vector3d(x_size, y_size, z_size);
+  mp_.map_min_boundary_ = mp_.map_origin_;
+  mp_.map_max_boundary_ = mp_.map_origin_ + mp_.map_size_;
 
   mp_.prob_hit_log_ = logit(mp_.p_hit_);
   mp_.prob_miss_log_ = logit(mp_.p_miss_);
@@ -77,6 +81,13 @@ void GridMap::initMap(ros::NodeHandle &nh)
 
   for (int i = 0; i < 3; ++i)
     mp_.map_voxel_num_(i) = ceil(mp_.map_size_(i) / mp_.resolution_);
+
+  ROS_WARN_STREAM("GridMap init bounds: origin=" << mp_.map_origin_.transpose()
+                   << " size=" << mp_.map_size_.transpose()
+                   << " min_boundary=" << mp_.map_min_boundary_.transpose()
+                   << " max_boundary=" << mp_.map_max_boundary_.transpose()
+                   << " resolution=" << mp_.resolution_
+                   << " ground_height=" << mp_.ground_height_);
 
   mp_.map_min_boundary_ = mp_.map_origin_;
   mp_.map_max_boundary_ = mp_.map_origin_ + mp_.map_size_;
@@ -530,6 +541,206 @@ Eigen::Vector3d GridMap::closetPointInMap(const Eigen::Vector3d &pt, const Eigen
   return camera_pt + (min_t - 1e-3) * diff;
 }
 
+std::string GridMap::describeOccupancyDebugContext(const Eigen::Vector3d& pos,
+                                                   const Eigen::Vector3i& local_idx_hint,
+                                                   const Eigen::Vector3d& local_coord_hint,
+                                                   int neighbor_radius,
+                                                   int max_neighbors)
+{
+  std::ostringstream ss;
+  Eigen::Vector3i map_idx;
+  bool pos_in_map = isInMap(pos);
+  if (pos_in_map)
+    posToIndex(pos, map_idx);
+  else
+    map_idx = Eigen::Vector3i::Constant(INVALID_IDX);
+
+  int inf_step = ceil(mp_.obstacles_inflation_ / mp_.resolution_);
+  bool virtual_ceil_active = mp_.virtual_ceil_height_ > -0.5;
+  int ceil_id = INVALID_IDX;
+  bool ceil_id_in_map = false;
+  if (virtual_ceil_active)
+  {
+    ceil_id = floor((mp_.virtual_ceil_height_ - mp_.map_origin_(2)) * mp_.resolution_inv_);
+    ceil_id_in_map = ceil_id >= 0 && ceil_id < mp_.map_voxel_num_(2);
+  }
+
+  ss << "pos=" << pos.transpose()
+     << " pos_in_map=" << pos_in_map
+     << " min_boundary=" << mp_.map_min_boundary_.transpose()
+     << " max_boundary=" << mp_.map_max_boundary_.transpose()
+     << " map_idx=" << map_idx.transpose()
+     << " local_idx_hint=" << local_idx_hint.transpose()
+     << " local_coord_hint=" << local_coord_hint.transpose()
+     << " camera_pos=" << md_.camera_pos_.transpose()
+     << " local_bound_min=" << md_.local_bound_min_.transpose()
+     << " local_bound_max=" << md_.local_bound_max_.transpose();
+
+  bool query_inside_local_bounds = false;
+  bool query_inside_local_xy_for_ceil = false;
+  bool query_on_ceiling_plane = false;
+  int query_inflated_occ = 0;
+  bool raw_inflation = false;
+  bool virtual_ceiling = false;
+
+  if (pos_in_map)
+  {
+    Eigen::Vector3d map_center;
+    indexToPos(map_idx, map_center);
+    int query_addr = toAddress(map_idx);
+    double query_raw_log_odds = md_.occupancy_buffer_[query_addr];
+    int query_raw_occ = query_raw_log_odds > mp_.min_occupancy_log_ ? 1 : 0;
+    query_inflated_occ = int(md_.occupancy_buffer_inflate_[query_addr]);
+
+    query_inside_local_bounds =
+        map_idx(0) >= md_.local_bound_min_(0) && map_idx(0) <= md_.local_bound_max_(0) &&
+        map_idx(1) >= md_.local_bound_min_(1) && map_idx(1) <= md_.local_bound_max_(1) &&
+        map_idx(2) >= md_.local_bound_min_(2) && map_idx(2) <= md_.local_bound_max_(2);
+    query_inside_local_xy_for_ceil =
+        map_idx(0) >= md_.local_bound_min_(0) && map_idx(0) <= md_.local_bound_max_(0) &&
+        map_idx(1) >= md_.local_bound_min_(1) && map_idx(1) <= md_.local_bound_max_(1);
+    query_on_ceiling_plane =
+        virtual_ceil_active && ceil_id_in_map && query_inside_local_xy_for_ceil && map_idx(2) == ceil_id;
+    virtual_ceiling = query_on_ceiling_plane;
+
+    ss << " map_cell_center=" << map_center.transpose()
+       << " occ=" << query_raw_occ
+       << " inflate=" << query_inflated_occ
+       << " query_map_idx=" << map_idx.transpose()
+       << " query_cell_center=" << map_center.transpose()
+       << " query_raw_occupancy=" << query_raw_occ
+       << " query_raw_log_odds=" << query_raw_log_odds
+       << " query_inflated_occupancy=" << query_inflated_occ
+       << " query_inside_local_bounds=" << query_inside_local_bounds;
+  }
+  else
+  {
+    ss << " boundary_margin_to_min=" << (pos - mp_.map_min_boundary_).transpose()
+       << " boundary_margin_to_max=" << (mp_.map_max_boundary_ - pos).transpose()
+       << " query_raw_occupancy=-1"
+       << " query_inflated_occupancy=-1"
+       << " query_inside_local_bounds=0";
+  }
+
+  ss << " inflation_params={resolution=" << mp_.resolution_
+     << ",obstacles_inflation=" << mp_.obstacles_inflation_
+     << ",inf_step=" << inf_step
+     << "}"
+     << " virtual_ceiling_status={enabled=" << virtual_ceil_active
+     << ",virtual_ceil_height=" << mp_.virtual_ceil_height_
+     << ",ceil_id=" << ceil_id
+     << ",ceil_id_in_map=" << ceil_id_in_map
+     << ",query_on_ceiling_plane=" << query_on_ceiling_plane
+     << ",query_inside_local_xy=" << query_inside_local_xy_for_ceil
+     << "}";
+
+  int neighbor_count = 0;
+  ss << " occupied_neighbors=[";
+  for (int dx = -neighbor_radius; dx <= neighbor_radius && neighbor_count < max_neighbors; ++dx)
+    for (int dy = -neighbor_radius; dy <= neighbor_radius && neighbor_count < max_neighbors; ++dy)
+      for (int dz = -neighbor_radius; dz <= neighbor_radius && neighbor_count < max_neighbors; ++dz)
+      {
+        Eigen::Vector3i neighbor = local_idx_hint + Eigen::Vector3i(dx, dy, dz);
+        Eigen::Vector3d neighbor_world = local_coord_hint +
+                                         Eigen::Vector3d(dx, dy, dz) * mp_.resolution_;
+        if (!isInMap(neighbor_world))
+          continue;
+        if (getInflateOccupancy(neighbor_world) != 1)
+          continue;
+
+        Eigen::Vector3i neighbor_map_idx;
+        posToIndex(neighbor_world, neighbor_map_idx);
+        Eigen::Vector3d neighbor_map_center;
+        indexToPos(neighbor_map_idx, neighbor_map_center);
+
+        if (neighbor_count > 0)
+          ss << "; ";
+        ss << "local=" << neighbor.transpose()
+           << " world=" << neighbor_world.transpose()
+           << " map_idx=" << neighbor_map_idx.transpose()
+           << " map_center=" << neighbor_map_center.transpose()
+           << " occ=" << getOccupancy(neighbor_map_idx)
+           << " inflate=1";
+        ++neighbor_count;
+      }
+  ss << "]";
+
+  int inflation_source_total = 0;
+  int inflation_source_emitted = 0;
+  bool inflation_source_truncated = false;
+  ss << " inflation_sources=[";
+  if (pos_in_map)
+  {
+    Eigen::Vector3d query_center;
+    indexToPos(map_idx, query_center);
+
+    Eigen::Vector3i source_min = map_idx - Eigen::Vector3i(inf_step, inf_step, inf_step);
+    Eigen::Vector3i source_max = map_idx + Eigen::Vector3i(inf_step, inf_step, inf_step);
+    boundIndex(source_min);
+    boundIndex(source_max);
+
+    for (int x = source_min(0); x <= source_max(0); ++x)
+      for (int y = source_min(1); y <= source_max(1); ++y)
+        for (int z = source_min(2); z <= source_max(2); ++z)
+        {
+          Eigen::Vector3i source_idx(x, y, z);
+          int source_addr = toAddress(source_idx);
+          double source_raw_log_odds = md_.occupancy_buffer_[source_addr];
+          int source_raw_occ = source_raw_log_odds > mp_.min_occupancy_log_ ? 1 : 0;
+          if (source_raw_occ != 1)
+            continue;
+
+          ++inflation_source_total;
+          if (inflation_source_emitted < max_neighbors)
+          {
+            Eigen::Vector3d source_center;
+            indexToPos(source_idx, source_center);
+            Eigen::Vector3d source_offset = source_center - query_center;
+            bool source_inside_local_bounds =
+                source_idx(0) >= md_.local_bound_min_(0) && source_idx(0) <= md_.local_bound_max_(0) &&
+                source_idx(1) >= md_.local_bound_min_(1) && source_idx(1) <= md_.local_bound_max_(1) &&
+                source_idx(2) >= md_.local_bound_min_(2) && source_idx(2) <= md_.local_bound_max_(2);
+
+            if (inflation_source_emitted > 0)
+              ss << "; ";
+            ss << "source_idx=" << source_idx.transpose()
+               << " world_center=" << source_center.transpose()
+               << " index_offset=" << (source_idx - map_idx).transpose()
+               << " offset_from_query=" << source_offset.transpose()
+               << " raw_occ=" << source_raw_occ
+               << " raw_log_odds=" << source_raw_log_odds
+               << " inside_local_bounds=" << source_inside_local_bounds
+               << " covers_query=1";
+            ++inflation_source_emitted;
+          }
+          else
+          {
+            inflation_source_truncated = true;
+          }
+        }
+  }
+  ss << "]"
+     << " inflation_source_total=" << inflation_source_total
+     << " inflation_source_emitted=" << inflation_source_emitted
+     << " inflation_source_truncated=" << inflation_source_truncated;
+
+  raw_inflation = query_inflated_occ == 1 && inflation_source_total > 0;
+
+  std::string cause = "inflated_but_no_source_found";
+  if (!pos_in_map)
+    cause = "out_of_map_occupied_sentinel";
+  else if (raw_inflation && virtual_ceiling)
+    cause = "raw_inflation+virtual_ceiling";
+  else if (raw_inflation)
+    cause = "raw_inflation";
+  else if (virtual_ceiling)
+    cause = "virtual_ceiling";
+
+  ss << " cause=" << cause;
+
+  return ss.str();
+}
+
 void GridMap::clearAndInflateLocalMap()
 {
   /*clear outside local*/
@@ -619,6 +830,9 @@ void GridMap::clearAndInflateLocalMap()
         md_.occupancy_buffer_inflate_[toAddress(x, y, z)] = 0;
       }
 
+  int occupied_voxel_count = 0;
+  int inflated_voxel_count = 0;
+
   // inflate obstacles
   for (int x = md_.local_bound_min_(0); x <= md_.local_bound_max_(0); ++x)
     for (int y = md_.local_bound_min_(1); y <= md_.local_bound_max_(1); ++y)
@@ -627,6 +841,7 @@ void GridMap::clearAndInflateLocalMap()
 
         if (md_.occupancy_buffer_[toAddress(x, y, z)] > mp_.min_occupancy_log_)
         {
+          ++occupied_voxel_count;
           inflatePoint(Eigen::Vector3i(x, y, z), inf_step, inf_pts);
 
           for (int k = 0; k < (int)inf_pts.size(); ++k)
@@ -638,6 +853,8 @@ void GridMap::clearAndInflateLocalMap()
             {
               continue;
             }
+            if (md_.occupancy_buffer_inflate_[idx_inf] == 0)
+              ++inflated_voxel_count;
             md_.occupancy_buffer_inflate_[idx_inf] = 1;
           }
         }
@@ -650,9 +867,20 @@ void GridMap::clearAndInflateLocalMap()
     for (int x = md_.local_bound_min_(0); x <= md_.local_bound_max_(0); ++x)
       for (int y = md_.local_bound_min_(1); y <= md_.local_bound_max_(1); ++y)
       {
-        md_.occupancy_buffer_inflate_[toAddress(x, y, ceil_id)] = 1;
+        int ceil_addr = toAddress(x, y, ceil_id);
+        if (md_.occupancy_buffer_inflate_[ceil_addr] == 0)
+          ++inflated_voxel_count;
+        md_.occupancy_buffer_inflate_[ceil_addr] = 1;
       }
   }
+
+  ROS_WARN_STREAM_THROTTLE(1.0, "clearAndInflateLocalMap occupied_voxel_count=" << occupied_voxel_count
+                           << " inflated_voxel_count=" << inflated_voxel_count
+                           << " local_bound_min=" << md_.local_bound_min_.transpose()
+                           << " local_bound_max=" << md_.local_bound_max_.transpose()
+                           << " local_map_margin=" << mp_.local_map_margin_
+                           << " truncate_height=" << mp_.visualization_truncate_height_
+                           << " camera_pos=" << md_.camera_pos_.transpose());
 }
 
 void GridMap::visCallback(const ros::TimerEvent & /*event*/)
@@ -831,8 +1059,15 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 void GridMap::publishMap()
 {
 
-  if (map_pub_.getNumSubscribers() <= 0)
+  int map_subscribers = map_pub_.getNumSubscribers();
+  if (map_subscribers <= 0)
+  {
+    ROS_WARN_STREAM_THROTTLE(1.0, "publishMap skipped: no subscribers. local_updated=" << md_.local_updated_
+                             << " occ_need_update=" << md_.occ_need_update_
+                             << " has_first_depth=" << md_.has_first_depth_
+                             << " has_odom=" << md_.has_odom_);
     return;
+  }
 
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
@@ -872,13 +1107,25 @@ void GridMap::publishMap()
 
   pcl::toROSMsg(cloud, cloud_msg);
   map_pub_.publish(cloud_msg);
+  ROS_WARN_STREAM_THROTTLE(1.0, "publishMap published points=" << cloud.points.size()
+                           << " subscribers=" << map_subscribers
+                           << " min_cut=" << min_cut.transpose()
+                           << " max_cut=" << max_cut.transpose());
 }
 
 void GridMap::publishMapInflate(bool all_info)
 {
 
-  if (map_inf_pub_.getNumSubscribers() <= 0)
+  int inflate_subscribers = map_inf_pub_.getNumSubscribers();
+  if (inflate_subscribers <= 0)
+  {
+    ROS_WARN_STREAM_THROTTLE(1.0, "publishMapInflate skipped: no subscribers. all_info=" << all_info
+                             << " local_updated=" << md_.local_updated_
+                             << " occ_need_update=" << md_.occ_need_update_
+                             << " has_first_depth=" << md_.has_first_depth_
+                             << " has_odom=" << md_.has_odom_);
     return;
+  }
 
   pcl::PointXYZ pt;
   pcl::PointCloud<pcl::PointXYZ> cloud;
@@ -922,6 +1169,11 @@ void GridMap::publishMapInflate(bool all_info)
 
   pcl::toROSMsg(cloud, cloud_msg);
   map_inf_pub_.publish(cloud_msg);
+  ROS_WARN_STREAM_THROTTLE(1.0, "publishMapInflate published points=" << cloud.points.size()
+                           << " subscribers=" << inflate_subscribers
+                           << " all_info=" << all_info
+                           << " min_cut=" << min_cut.transpose()
+                           << " max_cut=" << max_cut.transpose());
 
   // ROS_INFO("pub map");
 }
