@@ -194,6 +194,43 @@ namespace ego_planner
     displayMarkerList(optimal_list_pub, list, 0.15, color, id);
   }
 
+  void PlanningVisualization::displayOptimalTraj(UniformBspline traj, int id)
+  {
+    if (optimal_list_pub.getNumSubscribers() == 0)
+    {
+      return;
+    }
+
+    vector<Eigen::Vector3d> list;
+    const double duration = traj.getTimeSum();
+    const double dt = 0.05;
+    for (double t = 0.0; t < duration; t += dt)
+    {
+      list.push_back(traj.evaluateDeBoorT(t));
+    }
+    list.push_back(traj.evaluateDeBoorT(duration));
+
+    Eigen::Vector4d color(1, 0, 0, 1);
+    displayMarkerList(optimal_list_pub, list, 0.08, color, id);
+  }
+
+  void PlanningVisualization::clearOptimalTraj(int id)
+  {
+    if (optimal_list_pub.getNumSubscribers() == 0)
+    {
+      return;
+    }
+
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "world";
+    marker.header.stamp = ros::Time::now();
+    marker.action = visualization_msgs::Marker::DELETE;
+    marker.id = id;
+    optimal_list_pub.publish(marker);
+    marker.id = id + 1000;
+    optimal_list_pub.publish(marker);
+  }
+
   void PlanningVisualization::displayAStarList(std::vector<std::vector<Eigen::Vector3d>> a_star_paths, int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)
   {
 
