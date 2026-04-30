@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /Planner1/OptimalList1
         - /OccupancyInflate1/Autocompute Value Bounds1
       Splitter Ratio: 0.5
     Tree Height: 349
@@ -62,7 +63,7 @@ Visualization Manager:
       Value: true
     - Class: rviz/Image
       Enabled: true
-      Image Topic: /quad0_pcl_render_node/depth_img
+      Image Topic: /grid_map/depth
       Max Value: 1
       Median window: 5
       Min Value: 0
@@ -72,6 +73,34 @@ Visualization Manager:
       Transport Hint: raw
       Unreliable: false
       Value: true
+    - Class: rviz/Group
+      Displays:
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /ego_planner_node/a_star_list
+          Name: Marker
+          Namespaces:
+            {}
+          Queue Size: 100
+          Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /ego_planner_node/global_list
+          Name: Marker
+          Namespaces:
+            {}
+          Queue Size: 100
+          Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /ego_planner_node/optimal_list
+          Name: Marker
+          Namespaces:
+            {}
+          Queue Size: 100
+          Value: true
+      Enabled: true
+      Name: EGOv2
     - Class: rviz/Group
       Displays:
         - Class: rviz/Marker
@@ -87,15 +116,15 @@ Visualization Manager:
           Marker Topic: /ego_planner_node/optimal_list
           Name: OptimalList
           Namespaces:
-            "": true
+            {}
           Queue Size: 100
           Value: true
-      Enabled: true
+      Enabled: false
       Name: Planner
     - Alpha: 1
       Autocompute Intensity Bounds: false
       Autocompute Value Bounds:
-        Max Value: 1.940000057220459
+        Max Value: 3.440000057220459
         Min Value: 0.03999999910593033
         Value: true
       Axis: Z
@@ -170,7 +199,7 @@ Visualization Manager:
       X std deviation: 0.5
       Y std deviation: 0.5
     - Class: rviz/SetGoal
-      Topic: /move_base_simple/goal
+      Topic: /move_base_simple/goal_raw
     - Class: rviz/PublishPoint
       Single click: true
       Topic: /clicked_point
@@ -178,7 +207,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 55.34394073486328
+      Distance: 34.35810470581055
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -186,17 +215,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.575020432472229
-        Y: 2.0294570922851562
-        Z: 1.2499116659164429
+        X: 4.929132461547852
+        Y: -5.689916133880615
+        Z: 2.1571648120880127
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5647963285446167
+      Pitch: 0.9047966003417969
       Target Frame: <Fixed Frame>
-      Yaw: 4.7154083251953125
+      Yaw: 4.670405864715576
     Saved: ~
 Window Geometry:
   Displays:
