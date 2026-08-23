@@ -26,6 +26,12 @@
   <arg name="max_vel"/>
   <arg name="max_acc"/>
   <arg name="planning_horizon"/>
+  <!-- Benchmark instrumentation. Defaults are this file's own previous literals, so a
+       caller that passes neither produces an identical launch. `robot_radius` is the
+       physical inflation: upstream 0.09 m is a third of a Hummingbird's 0.25 m radius,
+       so the planner routes through gaps the airframe cannot fit. -->
+  <arg name="robot_radius" default="0.09"/>
+  <arg name="obstacle_clearance" default="0.5"/>
 
   <arg name="point_num"/>
   <arg name="point0_x"/>
@@ -86,7 +92,7 @@
     <param name="grid_map/local_update_range_x"  value="5.5" /> 
     <param name="grid_map/local_update_range_y"  value="5.5" /> 
     <param name="grid_map/local_update_range_z"  value="4.5" /> 
-    <param name="grid_map/obstacles_inflation"     value="0.09" /> 
+    <param name="grid_map/obstacles_inflation"     value="$(arg robot_radius)" /> 
     <param name="grid_map/local_map_margin" value="30"/>
     <param name="grid_map/ground_height"        value="-0.01"/>
     <!-- camera parameter -->
@@ -137,7 +143,7 @@
     <param name="optimization/lambda_collision" value="0.5" type="double"/>
     <param name="optimization/lambda_feasibility" value="0.1" type="double"/>
     <param name="optimization/lambda_fitness" value="1.0" type="double"/>
-    <param name="optimization/dist0" value="0.5" type="double"/>
+    <param name="optimization/dist0" value="$(arg obstacle_clearance)" type="double"/>
     <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
     <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
 
