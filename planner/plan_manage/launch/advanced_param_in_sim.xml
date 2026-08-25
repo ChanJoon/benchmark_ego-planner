@@ -26,6 +26,9 @@
   <arg name="max_vel"/>
   <arg name="max_acc"/>
   <arg name="planning_horizon"/>
+  <arg name="local_update_range_x" default="5.5"/>
+  <arg name="local_update_range_y" default="5.5"/>
+  <arg name="local_update_range_z" default="4.5"/>
   <!-- Benchmark instrumentation. Defaults are this file's own previous literals, so a
        caller that passes neither produces an identical launch. `robot_radius` is the
        physical inflation: upstream 0.09 m is a third of a Hummingbird's 0.25 m radius,
@@ -89,9 +92,9 @@
     <param name="grid_map/map_size_x"   value="$(arg map_size_x_)" /> 
     <param name="grid_map/map_size_y"   value="$(arg map_size_y_)" /> 
     <param name="grid_map/map_size_z"   value="$(arg map_size_z_)" /> 
-    <param name="grid_map/local_update_range_x"  value="5.5" /> 
-    <param name="grid_map/local_update_range_y"  value="5.5" /> 
-    <param name="grid_map/local_update_range_z"  value="4.5" /> 
+    <param name="grid_map/local_update_range_x"  value="$(arg local_update_range_x)" /> 
+    <param name="grid_map/local_update_range_y"  value="$(arg local_update_range_y)" /> 
+    <param name="grid_map/local_update_range_z"  value="$(arg local_update_range_z)" /> 
     <param name="grid_map/obstacles_inflation"     value="$(arg robot_radius)" /> 
     <param name="grid_map/local_map_margin" value="30"/>
     <param name="grid_map/ground_height"        value="-0.01"/>
